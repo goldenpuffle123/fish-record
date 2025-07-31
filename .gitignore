@@ -1,0 +1,15 @@
+__pycache__/
+.vscode/*
+!.vscode/settings.json
+*.npz
+*.npy
+*.yml
+*.yaml
+*.txt
+*.md
+!README.md
+*.jpg
+*.png
+*.mp4
+*.avi
+*.whl
