@@ -10,6 +10,7 @@ __pycache__/
 !README.md
 *.jpg
 *.png
+!fishy_thumbsup.png
 *.mp4
 *.avi
 *.whl
