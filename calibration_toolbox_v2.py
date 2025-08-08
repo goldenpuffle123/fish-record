@@ -1,7 +1,7 @@
 import numpy as np
 import cv2
 from pathlib import Path
-from PySide6.QtWidgets import QFileDialog, QApplication
+import select_dialog
 import logging
 logging.basicConfig(
     level=logging.INFO,
@@ -13,13 +13,9 @@ class CalibrationToolbox:
                  pts_w: int,
                  pts_h: int,
                  square_size_mm: float,
-                 file_prefix: str = "cam-",
-                 calibration_dir: str = None) -> None:
-        
-        if calibration_dir is None:
-            self.calibration_dir = Path(self.get_folder())
-        else:
-            self.calibration_dir = Path(calibration_dir)
+                 file_prefix: str = "cam-") -> None:
+
+        self.calibration_dir = Path(select_dialog.get_dir("Select calibration images directory"))
 
         if not self.calibration_dir.exists():
             logging.error("Calibration images directory not found!")
@@ -36,19 +32,6 @@ class CalibrationToolbox:
         self.num_cameras = 2
         self.cam_matrices = [None]*self.num_cameras
 
-    def get_folder(self) -> str:
-        app = QApplication.instance()
-        if app is None:                     # In case implemented into complete GUI
-            app = QApplication([])
-        folder = QFileDialog.getExistingDirectory(
-            parent=None,
-            caption="Select calibration images directory"
-        )
-        if folder=="":
-            logging.error("Select dialog cancelled")
-            raise FileNotFoundError("Select dialog cancelled")
-
-        return folder
     
     def modify_image(self, image: np.ndarray) -> np.ndarray:
         clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
@@ -277,10 +260,10 @@ if __name__ == "__main__":
     """ ct.calibrate_camera(0, save_info=True)
     ct.calibrate_camera(1, save_info=True) """
 
-    data_0 = np.load("cal_images_250730-1519/cam-0.npz")
+    """ data_0 = np.load("cal_images_250730-1519/cam-0.npz")
     data_1 = np.load("cal_images_250730-1519/cam-1.npz")
 
     K0, dist0 = data_0['mtx'], data_0['dist']
     K1, dist1 = data_1['mtx'], data_1['dist']
 
-    P0, P1 = ct.calibrate_stereo(K0, dist0, K1, dist1, save_info=False)
+    P0, P1 = ct.calibrate_stereo(K0, dist0, K1, dist1, save_info=False) """
