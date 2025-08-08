@@ -9,7 +9,7 @@ class CameraDriver:
         self.num_cams = None
 
         #constants
-        self.ACQUISITION_FRAME_RATE = 100
+        self.ACQUISITION_FRAME_RATE = 130
         self.NUM_IMAGES = 5000
         self.AUTOEXPOSUREUPPERLIMIT = 5000
         self.SERIAL_PRIMARY = "24048471"

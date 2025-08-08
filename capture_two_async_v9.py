@@ -96,26 +96,26 @@ class VideoWriterProcess(QObject):
             
             # NVIDIA NVENC H.264 Parameters (optimized for playback)
             '-c:v', 'h264_nvenc',          # NVIDIA H.264 encoder
-            '-preset', 'p6',               # Quality/speed preset (was p1, p3 worked in v5)
-            '-rc', 'vbr',               # Bitrate type (working from v5)
-            '-cq', '20',          # Constant quality mode (best quality approach)
+            '-preset', 'p3',               # Quality/speed preset (was p1, p3 worked in v5)
+            '-rc', 'cbr',               # Bitrate type (working from v5)
+            #'-cq', '20',          # Constant quality mode (best quality approach)
             '-b:v', '25M',                 # Target bitrate (working from v5)
             '-maxrate', '35M',             # Max bitrate (working from v5)
             '-bufsize', '45M',             # Buffer size (working from v5)
             '-gpu', '0',                   # Use GPU 0
-            '-profile:v', 'main',          # Compatibility profile
-            '-surfaces', '8',              # NVENC surfaces (working from v5)
+            '-profile:v', 'baseline',          # Compatibility profile
+            '-surfaces', '16',              # NVENC surfaces (working from v5)
             '-vf', 'format=yuv420p',       # Video filter (working from v5)
             '-color_range', 'pc',          # Color range (working from v5)
             '-colorspace','bt709',         # Color space (working from v5)
             '-f', 'mp4',                   # Output container format
             '-g', '300',
             '-keyint_min', '100',
-            '-bf', '2',           # B-frames for temporal compression
-            '-refs', '2',         # More reference frames
+            '-bf', '0',           # B-frames for temporal compression
+            '-refs', '1',         # More reference frames
             '-spatial_aq', '1',   # Spatial adaptive quantization
             '-temporal_aq', '0',  # Temporal adaptive quantization
-            '-rc-lookahead', '5', # Lookahead for better encoding decisions
+            '-rc-lookahead', '0', # Lookahead for better encoding decisions
             self._get_filename()
         ]
     
@@ -229,7 +229,7 @@ class VideoWriterProcess(QObject):
         logging.info(f"Stopped recording cam {self.cam_idx}. Dropped {self.dropped_frames} frames.")
     
     def _get_filename(self) -> str:
-        return f"{self.output_dir}/data_{self.date_time}_cam-{self.cam_idx}.mp4"
+        return f"{self.output_dir}/data_{self.date_time}_cam-{self.cam_idx}_5cm.mp4"
 
 
 class SyncHandler(QObject):
@@ -264,7 +264,7 @@ class SyncHandler(QObject):
         self.frame_info = [queue.Queue(), queue.Queue()]
         
         # Display and sync control
-        self.display_every_n = 10  # Display every 5th frame (20Hz at 100Hz capture)
+        self.display_every_n = 5  # Display every 5th frame (20Hz at 100Hz capture)
         self.frame_counter = 0
         self.warmup_frames = 300
 

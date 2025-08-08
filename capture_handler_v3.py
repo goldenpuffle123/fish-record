@@ -18,7 +18,7 @@ class BufferedCaptureHandler(PySpin.ImageEventHandler, QObject):
         
         # 3 buffers: allows more flexibility for read/write operations
         self.buffers: list[shared_memory.SharedMemory] = []
-        for i in range(3):
+        for i in range(4):
             name = f"cam-{idx}_buf-{i}"
             shm = shared_memory.SharedMemory(create=True, size=int(np.prod(frame_shape)), name=name)
             self.buffers.append(shm)
@@ -39,7 +39,7 @@ class BufferedCaptureHandler(PySpin.ImageEventHandler, QObject):
             
             buffer_idx = self.current_write
             # Cycle through 3 buffers for next write
-            self.current_write = (self.current_write + 1) % 3
+            self.current_write = (self.current_write + 1) % 4
         
         self.frame_captured.emit(self.idx, im_id, buffer_idx)
         image.Release()
