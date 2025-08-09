@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import QFileDialog, QApplication
 import logging
 
-def get_dir(msg: str = ""):
+def get_dir(msg: str = "") -> str:
     app = QApplication.instance()
     if app is None:
         app = QApplication([])
@@ -12,7 +12,7 @@ def get_dir(msg: str = ""):
         raise FileNotFoundError("Select dialog cancelled, folder not found")
     return folder
 
-def get_filepath(msg: str = "", dir: str = None, filter: str = None):
+def get_filepath(msg: str = "", dir: str = None, filter: str = None) -> str:
     app = QApplication.instance()
     if app is None:
         app = QApplication([])
@@ -25,7 +25,7 @@ def get_filepath(msg: str = "", dir: str = None, filter: str = None):
         raise FileNotFoundError("Select dialog cancelled, file not found")
     return filepath
 
-def get_filepaths(msg: str = "", dir: str = None, filter: str = None, pair: bool = False):
+def get_filepaths(msg: str = "", dir: str = None, filter: str = None, pair: bool = False) -> list[str]:
     app = QApplication.instance()
     if app is None:
         app = QApplication([])

@@ -37,13 +37,16 @@ class CalibrationToolbox:
         clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
         return clahe.apply(image)
 
-    def calibrate_camera(self, cam_idx: int, save_info: bool = False) -> None:
+    def calibrate_camera(self,
+                         cam_idx: int,
+                         save_info: bool = False) -> tuple[np.ndarray, np.ndarray] | None:
+        
         """Gets intrinsic matrix (from v1)"""
         W = self.pts_w
         H = self.pts_h
 
         # Termination criteria
-        criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
+        criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 100, 0.001)
         
         objpoints = []  # Points for this camera
         imgpoints = []
@@ -102,7 +105,7 @@ class CalibrationToolbox:
                 logging.info(f"Found in {img_path.name}")
             else:
                 logging.info(f"Not found in {img_path.name}")
-            cv2.waitKey(500)
+            cv2.waitKey()
 
         if not objpoints or not imgpoints:
             logging.error(f"No valid detections for camera {cam_idx}")
@@ -121,16 +124,22 @@ class CalibrationToolbox:
             logging.error(f"Error in calibrating {cam_idx}")
         cv2.destroyAllWindows()
 
-    def calibrate_stereo(self, K0, dist0, K1, dist1, save_info: bool = False) -> None:
+    def calibrate_stereo(self,
+                         K0: np.ndarray,
+                         dist0: np.ndarray,
+                         K1: np.ndarray,
+                         dist1: np.ndarray,
+                         save_info: bool = False
+                         ) -> tuple[np.ndarray,
+                                    np.ndarray,
+                                    np.ndarray,
+                                    np.ndarray,
+                                    np.ndarray,
+                                    np.ndarray,
+                                    np.ndarray,
+                                    np.ndarray] | None:
         W = self.pts_w
         H = self.pts_h
-
-        # Termination criteria
-        
-        
-        
-
-
 
         # Prepare object points, like (0,0,0), (1,0,0), (2,0,0) ....,(6,5,0)
         # Note: converted to mm 
@@ -141,8 +150,8 @@ class CalibrationToolbox:
         
 
         # Look for images in calibration images directory of the specified file prefix, camera indexing, and file type
-        cam_0_paths = list(self.calibration_dir.glob(f"{self.file_prefix}{0}*.png"))
-        cam_1_paths = list(self.calibration_dir.glob(f"{self.file_prefix}{1}*.png"))
+        cam_0_paths = sorted(self.calibration_dir.glob(f"{self.file_prefix}0*.png"))
+        cam_1_paths = sorted(self.calibration_dir.glob(f"{self.file_prefix}1*.png"))
 
         image_size = None
 
@@ -205,10 +214,7 @@ class CalibrationToolbox:
                 cv2.imshow(f"imgs {0}", cv2.resize(img_0_display, None, fx=0.8, fy=0.8))
                 cv2.imshow(f"imgs {1}", cv2.resize(img_1_display, None, fx=0.8, fy=0.8))
 
-                key = cv2.waitKey(1) & 0xFF
-
-                if key==ord('q'):
-                    continue
+                cv2.waitKey()
 
                 objpoints.append(objp)
                 imgpoints_0.append(corners0)
@@ -218,10 +224,12 @@ class CalibrationToolbox:
 
         cv2.destroyAllWindows()
 
-        
+        if not imgpoints_0 or not imgpoints_1:
+            logging.warning("No valid image points found.")
+            return
 
         stereocalibration_flags = cv2.CALIB_FIX_INTRINSIC
-        ret, _, _, _, _, R, T, E, F = cv2.stereoCalibrate(
+        ret, K0, dist0, K1, dist1, R, T, E, F = cv2.stereoCalibrate(
             objpoints,
             imgpoints_0,
             imgpoints_1,
@@ -232,22 +240,27 @@ class CalibrationToolbox:
             criteria=criteria,
             flags=stereocalibration_flags
         )
-
         if ret:
-            P0, P1 = self.get_projection_matrices(K0, K1, R, T)
             if save_info:
                 npz_save = str(self.calibration_dir)+f"/stereo_matrices"
-                np.savez(npz_save, R=R, T=T, E=E, F=F, P0=P0, P1=P1)
+                np.savez(npz_save, K0=K0, dist0=dist0, K1=K1, dist1=dist1, R=R, T=T, E=E, F=F)
                 logging.info(f"Saved stereo calibration matrices in {npz_save}")
-            return P0, P1
-        else:
-            logging.error(f"Error in stereo calibration")
+            return K0, dist0, K1, dist1, R, T, E, F
         
-    def get_projection_matrices(self, K0, K1, R, T):
+    def get_projection_matrices(self,
+                                K0: np.ndarray,
+                                K1: np.ndarray,
+                                R: np.ndarray,
+                                T: np.ndarray,
+                                save_info: bool) -> tuple[np.ndarray, np.ndarray]:
         """Get projection matrices P0 and P1 from intrinsic matrices K0, K1 and extrinsic parameters R, T"""
         P0 = K0 @ np.hstack((np.eye(3), np.zeros((3, 1))))
         P1 = K1 @ np.hstack((R, T))
 
+        if save_info:
+            npz_save = str(self.calibration_dir) + f"/projection_matrices"
+            np.savez(npz_save, P0=P0, P1=P1)
+            logging.info(f"Saved projection matrices in {npz_save}")
         return P0, P1
 
 
@@ -257,13 +270,16 @@ if __name__ == "__main__":
                             pts_h=4,
                             square_size_mm=10)
     
-    """ ct.calibrate_camera(0, save_info=True)
-    ct.calibrate_camera(1, save_info=True) """
+    ct.calibrate_camera(0, save_info=True)
+    ct.calibrate_camera(1, save_info=True)
 
-    """ data_0 = np.load("cal_images_250730-1519/cam-0.npz")
-    data_1 = np.load("cal_images_250730-1519/cam-1.npz")
+    filenames = [f"{ct.calibration_dir}/cam-{i}.npz" for i in (0, 1)]
+    data_0 = np.load(filenames[0])
+    data_1 = np.load(filenames[1])
 
     K0, dist0 = data_0['mtx'], data_0['dist']
     K1, dist1 = data_1['mtx'], data_1['dist']
 
-    P0, P1 = ct.calibrate_stereo(K0, dist0, K1, dist1, save_info=False) """
+    K0, dist0, K1, dist1, R, T, E, F = ct.calibrate_stereo(K0, dist0, K1, dist1, save_info=True)
+
+    P0, P1 = ct.get_projection_matrices(K0, K1, R, T, save_info=True)
