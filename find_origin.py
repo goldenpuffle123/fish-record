@@ -46,7 +46,7 @@ class KeypointWidget(QWidget):
 
         self.origin_points = origin_points
 
-        self.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.resize(self.cal_pix_scaled.size())
         #self.showMaximized()
 
@@ -125,7 +125,7 @@ if __name__ == "__main__":
     app = QApplication([])
 
     try:
-        projection_matrices_path = "cal_images_250807-1400_5cm/projection_matrices.npz"
+        projection_matrices_path = "cal_images_250807-1641_10cm/projection_matrices.npz"
         projection_matrices = np.load(projection_matrices_path)
         #np.load(select_dialog.get_filepath("Select projection matrices file", filter="*.npz"))
     except OSError:
@@ -134,12 +134,12 @@ if __name__ == "__main__":
     P0 = projection_matrices["P0"]
     P1 = projection_matrices["P1"]
 
-    cali_matrices = np.load("cal_images_250807-1400_5cm/stereo_matrices.npz")
-    
-    for abc in range(2):
+    cali_matrices = np.load("cal_images_250807-1641_10cm/stereo_matrices.npz")
+
+    for _ in range(3): # How many times to run
         origin_points = [None, None]
-        test_videos = ["synced_videos/data_250807-144447_cam-0_5cm.mp4",
-                    "synced_videos/data_250807-144447_cam-1_5cm.mp4"]
+        test_videos = ["synced_videos/data_250807-170559_cam-0_10cm.mp4",
+                    "synced_videos/data_250807-170559_cam-1_10cm.mp4"]
         #np.load(select_dialog.get_filepaths("Select test videos", filter="*.mp4", pair=True))
 
         windows = [
@@ -154,7 +154,7 @@ if __name__ == "__main__":
 
 
         if None not in origin_points:
-            #print(f"Origin points selected: {origin_points}")
+            print(f"2D points: {origin_points}") # Not undistorted
 
             origin_points[0] = cv2.undistortPoints(np.array(origin_points[0]), cali_matrices["K0"], cali_matrices["dist0"], P=cali_matrices["K0"])
             origin_points[1] = cv2.undistortPoints(np.array(origin_points[1]), cali_matrices["K1"], cali_matrices["dist1"], P=cali_matrices["K1"])
@@ -165,5 +165,5 @@ if __name__ == "__main__":
                 np.array((origin_points[1])).T
             )
             points_3d = (points_4d[:3] / points_4d[3]).T
-            print(f"Triangulated origin point: {points_3d[0]}")
+            print(f"Triangulated: {points_3d[0].tolist()}")
         # np.save(Path(projection_matrices).parent / "water_point.npy", points_3d[0])
