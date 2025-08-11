@@ -3,7 +3,7 @@ import numpy as np
 
 
 class RefractionCalibration:
-    def __init__(self, cali_path: str, chessboard_path: str) -> None:
+    def __init__(self, cali_path: str, upload_path: str = "") -> None:
 
         self.cali_matrices: dict[str, np.ndarray] = np.load(cali_path)
         self.K = [self.cali_matrices["K0"], self.cali_matrices["K1"]]
@@ -11,26 +11,37 @@ class RefractionCalibration:
         self.inv_K = [np.linalg.inv(self.K[0]), np.linalg.inv(self.K[1])] # Compute inv ahead of time
         self.R_stereo = self.cali_matrices["R"]
         self.T_stereo = self.cali_matrices["T"].flatten()
-        
-        self.chessboard_path = chessboard_path
 
-        # For getting camera 1 origin relative to camera 0
-        self.R_cam_to_board = None
-        self.T_cam_to_board = None
+        self.ray_params_names = [
+            # Camera origins
+            "cam0_origin",
+            "cam1_origin",
+            # For getting camera 1 origin relative to camera 0
+            "R_cam_to_board",
+            "T_cam_to_board",
+            # Water plane parameters
+            "water_plane_normal",
+            "water_plane_d",
+            # For getting final transformation from camera to box
+            "R_final_cam_to_box",
+            "R_final_cam_to_box_inv",
+            "T_final_cam_to_box"
+        ]
 
-        # Water plane parameters
-        self.water_plane_normal = None
-        self.water_plane_d = None
+        if upload_path:
+            ray_params = np.load(upload_path)
+            for name in self.ray_params_names:
+                if name not in ray_params.files:
+                    raise ValueError(f"Parameter '{name}' not found in uploaded file.")
+                setattr(self, name, ray_params[name])
+        else:
+            for name in self.ray_params_names:
+                setattr(self, name, None)
 
         # Refraction indexes
         self.n1 = 1.0003
         self.n2 = 1.333
         self.n_ratio = self.n1 / self.n2
-
-        # For getting final transformation from camera to box
-        self.R_final_cam_to_box = None
-        self.R_final_cam_to_box_inv = None
-        self.T_final_cam_to_box = None
         
 
     def setup_stereo_geometry(self) -> None:
@@ -42,10 +53,10 @@ class RefractionCalibration:
         self.cam1_origin = -self.R_stereo.T @ self.T_stereo
         print("cam1_origin:", self.cam1_origin)
 
-    def get_pnp(self, W: int, H: int, square_size_mm: float) -> tuple[np.ndarray, np.ndarray] | tuple[None, None]:
+    def get_pnp(self, chessboard_path: str, W: int, H: int, square_size_mm: float) -> tuple[np.ndarray, np.ndarray] | tuple[None, None]:
         """Solve PnP for camera 0 to table."""
         # Chessboard flat on table. We assume this is parallel to the water surface.
-        img = cv2.imread(self.chessboard_path, cv2.IMREAD_GRAYSCALE)
+        img = cv2.imread(chessboard_path, cv2.IMREAD_GRAYSCALE)
 
         criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 100, 0.001)
         objp = np.zeros((H*W,3), np.float32)
@@ -273,17 +284,29 @@ class RefractionCalibration:
         """Transform a point from camera coordinates to box coordinates."""
         # Transform point
         return self.R_final_cam_to_box_inv @ (point - self.T_final_cam_to_box)
+    
+    def save_parameters(self, path: str = ""):
+        params_to_save = {}
+        for name in self.ray_params_names:
+            value = getattr(self, name, None)
+            if value is None:
+                raise ValueError(f"Parameter '{name}' is not initialized and cannot be saved.")
+            params_to_save[name] = value
+
+        # Save to npz
+        np.savez(path, **params_to_save)
+        print(f"Saved parameters to {path}")
 
 if __name__ == "__main__":
-    rc = RefractionCalibration("cal_images_250807-1641_10cm/stereo_matrices.npz", "cal_images_250807-1641_10cm/cam-0-00.png")
-    rc.setup_stereo_geometry()
-    rc.get_pnp(6, 4, 10)
+    rc = RefractionCalibration("cal_images_250807-1641_10cm/stereo_matrices.npz", upload_path="cal_images_250807-1641_10cm/ray_parameters.npz")
+    # rc.setup_stereo_geometry()
+    # rc.get_pnp("cal_images_250807-1641_10cm/cam-0-00.png", 6, 4, 10)
 
     # Get these from find_origin.py
     # Note: already undistorted
     """ p_water_cam = np.array([45.31909385197085, -22.482463212596368, 274.023306783117])  # using top right """
     p_water_cam = np.array([-47.167812398340914, 52.11593132229903, 445.0398179347797])
-    rc.get_water_parameters(p_water_cam)
+    # rc.get_water_parameters(p_water_cam)
 
     """ p_box_origin_cam = np.array([-7.43308086, -24.59866516, 266.73127528]) # tl
     p_box_x_axis_cam = np.array([ 47.52253882, -24.38689605, 267.31237704]) # tr
@@ -292,7 +315,7 @@ if __name__ == "__main__":
     p_box_x_axis_cam = np.array([50.416291444974846, -46.48186324869854, 435.3122079279627]) # tr
     p_box_y_axis_cam = np.array([-48.621162654825525, 54.19308586553376, 429.52718188283563]) # bl
 
-    rc.setup_transformation(p_box_origin_cam, p_box_x_axis_cam, p_box_y_axis_cam)
+    # rc.setup_transformation(p_box_origin_cam, p_box_x_axis_cam, p_box_y_axis_cam)
     """ br_corner = np.array([47.26931526610344, 30.348581650670887, 266.60577051482846])
     
     tl_water = np.array([-4.371592286697936, -20.99286077087117, 291.5036169620433])
@@ -342,3 +365,6 @@ if __name__ == "__main__":
         if underwater_point is not None:
             underwater_point = rc.transform_point(underwater_point)
             print(f"Underwater Point: {underwater_point}")
+
+    # Save ray parameters
+    # rc.save_parameters("cal_images_250807-1641_10cm/ray_parameters.npz")
