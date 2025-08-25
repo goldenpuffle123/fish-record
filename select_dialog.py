@@ -30,17 +30,18 @@ def get_filepaths(msg: str = "", dir: str = None, filter: str = None, pair: bool
     if app is None:
         app = QApplication([])
     filepaths = QFileDialog.getOpenFileNames(
-        caption="Select files",
+        caption=msg,
         dir=dir,
         filter=filter
     )[0]
     if not filepaths:
         raise FileNotFoundError("Select dialog cancelled, files not found")
 
-    if pair and len(filepaths) == 2:
-        if any(x in filepaths[0] for x in ["cam-1", "cam_1"]):
-            filepaths.reverse()
-    else:
-        raise NameError("Pair select error: not pair or wrong naming")
+    if pair:
+        if len(filepaths) == 2:
+            if any(x in filepaths[0] for x in ["cam-1", "cam_1"]): # hardcoded!!!
+                filepaths.reverse()
+        else:
+            raise NameError("Pair select error: not pair or wrong naming")
     
     return filepaths

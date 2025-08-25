@@ -34,7 +34,7 @@ class CalibrationToolbox:
 
     
     def modify_image(self, image: np.ndarray) -> np.ndarray:
-        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
         return clahe.apply(image)
 
     def calibrate_camera(self,
@@ -101,11 +101,12 @@ class CalibrationToolbox:
                 new_size = (int(w * scale), int(h * scale))
                 img_display = cv2.resize(img_display, new_size)
 
-                # cv2.imshow(f"imgs {cam_idx}", img_display)
+                cv2.imshow(f"imgs {cam_idx}", img_display)
                 logging.info(f"Found in {img_path.name}")
+                cv2.waitKey()
             else:
                 logging.info(f"Not found in {img_path.name}")
-            # cv2.waitKey()
+
 
         if not objpoints or not imgpoints:
             logging.error(f"No valid detections for camera {cam_idx}")
@@ -211,10 +212,10 @@ class CalibrationToolbox:
                 img_0_display = img_0.copy()
                 img_1_display = img_1.copy()
 
-                """ cv2.imshow(f"imgs {0}", cv2.resize(img_0_display, None, fx=0.8, fy=0.8))
+                cv2.imshow(f"imgs {0}", cv2.resize(img_0_display, None, fx=0.8, fy=0.8))
                 cv2.imshow(f"imgs {1}", cv2.resize(img_1_display, None, fx=0.8, fy=0.8))
 
-                cv2.waitKey() """
+                cv2.waitKey()
 
                 objpoints.append(objp)
                 imgpoints_0.append(corners0)

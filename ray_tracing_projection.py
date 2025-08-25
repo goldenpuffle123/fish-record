@@ -42,6 +42,9 @@ class RefractionCalibration:
         self.n1 = 1.0003
         self.n2 = 1.333
         self.n_ratio = self.n1 / self.n2
+
+        # Threshold
+        self.THRESHOLD = 1e-8
         
 
     def setup_stereo_geometry(self) -> None:
@@ -118,7 +121,7 @@ class RefractionCalibration:
         denom = np.dot(self.water_plane_normal, ray_dir)
 
         # Check if the ray does not intersect plane i.e., parallel
-        if np.abs(denom) < 1e-8:
+        if np.abs(denom) < self.THRESHOLD:
             return None
 
         t = (self.water_plane_d - np.dot(self.water_plane_normal, ray_origin)) / denom
@@ -153,7 +156,7 @@ class RefractionCalibration:
         # Note from https://en.wikipedia.org/wiki/Snell%27s_law#Vector_form
         if cos1 < 0:
             N = -N
-            cos1 = -np.dot(N, I)
+            cos1 = -cos1
 
         # Check for Total Internal Reflection
         sin2_sq = self.n_ratio**2 * (1.0 - cos1**2)
@@ -178,22 +181,20 @@ class RefractionCalibration:
         Returns:
             np.ndarray: The 3D point of closest approach.
         """
-        threshold = 1e-8
         d0 = d0 / np.linalg.norm(d0)
         d1 = d1 / np.linalg.norm(d1)
         # Line perpendicular to both lines
         n = np.cross(d0, d1)
 
-        if np.linalg.norm(n) < threshold:
-            # Lines are parallel - use midpoint method
-            w = o0 - o1
-            t0 = np.dot(w, d0)
-            t1 = np.dot(w, d1)
+        if np.linalg.norm(n) < self.THRESHOLD:
+            # Lines are parallel
+            w = o1 - o0  # Vector from line1 to line2
+            t = np.dot(w, d0)  # Parameter for closest point on line1
             
-            closest_on_line1 = o0 - t0 * d0
-            closest_on_line2 = o1 + t1 * d1
+            closest_on_line1 = o0 + t * d0
+            closest_on_line2 = o1
             
-            return (closest_on_line1 + closest_on_line2) / 2.0
+            return 0.5 * (closest_on_line1 + closest_on_line2)
 
         n0 = np.cross(d0, n)
         n1 = np.cross(d1, n)
@@ -201,14 +202,14 @@ class RefractionCalibration:
         denom0 = np.dot(d0, n1)
         denom1 = np.dot(d1, n0)
 
-        if abs(denom0) < threshold or abs(denom1) < threshold:
-            return (o0 + o1) / 2.0
+        if abs(denom0) < self.THRESHOLD or abs(denom1) < self.THRESHOLD:
+            return 0.5 * (o0 + o1)
 
         # Calculate the points on each line that form the shortest segment
         c0 = o0 + d0 * (np.dot((o1 - o0), n1) / denom0)
         c1 = o1 + d1 * (np.dot((o0 - o1), n0) / denom1)
 
-        return (c0 + c1) / 2.0
+        return 0.5 * (c0 + c1)
 
     def undistort_pixel(self, p_coords: np.ndarray, idx: int) -> np.ndarray:
         """Undistorts pixel coordinates using the camera's distortion parameters."""
@@ -272,15 +273,16 @@ class RefractionCalibration:
         self.T_final_cam_to_box = p_box_origin_cam
         x_axis_vec = p_box_x_axis_cam - p_box_origin_cam
         x_axis = x_axis_vec / np.linalg.norm(x_axis_vec)
-        z_axis = self.water_plane_normal
-        y_axis_raw = np.cross(z_axis, x_axis)
+        
+        y_axis_raw = np.cross(self.water_plane_normal, x_axis)
         y_axis = y_axis_raw / np.linalg.norm(y_axis_raw) # y-axis points down
+        z_axis = -self.water_plane_normal
         """ y_axis_vec = p_box_y_axis_cam - p_box_origin_cam
         y_axis = y_axis_vec / np.linalg.norm(y_axis_vec) """
         self.R_final_cam_to_box = np.column_stack((x_axis, y_axis, z_axis)) # Construct transformation matrix
         self.R_final_cam_to_box_inv = np.linalg.inv(self.R_final_cam_to_box) # Precompute inverse
 
-    def transform_point(self, point):
+    def transform_point(self, point: np.ndarray) -> np.ndarray:
         """Transform a point from camera coordinates to box coordinates."""
         # Transform point
         return self.R_final_cam_to_box_inv @ (point - self.T_final_cam_to_box)
@@ -299,6 +301,7 @@ class RefractionCalibration:
 
 if __name__ == "__main__":
     rc = RefractionCalibration("cal_images_250807-1641_10cm/stereo_matrices.npz", upload_path="cal_images_250807-1641_10cm/ray_parameters.npz")
+    # rc = RefractionCalibration("cal_images_250807-1641_10cm/stereo_matrices.npz")
     # rc.setup_stereo_geometry()
     # rc.get_pnp("cal_images_250807-1641_10cm/cam-0-00.png", 6, 4, 10)
 
