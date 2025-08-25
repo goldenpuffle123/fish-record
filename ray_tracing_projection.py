@@ -1,11 +1,16 @@
 import cv2
 import numpy as np
+import select_dialog
 
 
 class RefractionCalibration:
-    def __init__(self, cali_path: str, upload_path: str = "") -> None:
-
-        self.cali_matrices: dict[str, np.ndarray] = np.load(cali_path)
+    def __init__(self, cali_dir: str, upload: bool = False) -> None:
+        self.cali_dir = cali_dir
+        try:
+            self.cali_matrices: dict[str, np.ndarray] = np.load(self.cali_dir+"/stereo_matrices.npz")
+        except Exception as e:
+            print(f"Error loading calibration matrices: {e}")
+            quit()
         self.K = [self.cali_matrices["K0"], self.cali_matrices["K1"]]
         self.dist = [self.cali_matrices["dist0"], self.cali_matrices["dist1"]]
         self.inv_K = [np.linalg.inv(self.K[0]), np.linalg.inv(self.K[1])] # Compute inv ahead of time
@@ -28,12 +33,16 @@ class RefractionCalibration:
             "T_final_cam_to_box"
         ]
 
-        if upload_path:
-            ray_params = np.load(upload_path)
-            for name in self.ray_params_names:
-                if name not in ray_params.files:
-                    raise ValueError(f"Parameter '{name}' not found in uploaded file.")
-                setattr(self, name, ray_params[name])
+        if upload:
+            try:
+                ray_params = np.load(self.cali_dir+"/ray_parameters.npz")
+                for name in self.ray_params_names:
+                    if name not in ray_params.files:
+                        raise ValueError(f"Parameter '{name}' not found in uploaded file.")
+                    setattr(self, name, ray_params[name])
+            except Exception as e:
+                print(f"Error loading ray parameters: {e}")
+                quit()
         else:
             for name in self.ray_params_names:
                 setattr(self, name, None)
@@ -287,46 +296,43 @@ class RefractionCalibration:
         # Transform point
         return self.R_final_cam_to_box_inv @ (point - self.T_final_cam_to_box)
     
-    def save_parameters(self, path: str = ""):
+    def save_parameters(self):
         params_to_save = {}
         for name in self.ray_params_names:
             value = getattr(self, name, None)
             if value is None:
                 raise ValueError(f"Parameter '{name}' is not initialized and cannot be saved.")
             params_to_save[name] = value
-
+        path = self.cali_dir + "/ray_parameters.npz"
         # Save to npz
         np.savez(path, **params_to_save)
         print(f"Saved parameters to {path}")
 
+def setup_rc():
+    cali_dir = select_dialog.get_dir("Select calibration directory")
+    rc = RefractionCalibration(cali_dir, upload=False)
+
+    water_point = np.array([])
+    box_origin_point = np.array([])
+    box_xaxis_point = np.array([])
+    box_yaxis_point = np.array([])
+
+    # Path to a chessboard image lying FLAT on table
+    chessboard_path = select_dialog.get_filepath("Select chessboard image directory")
+
+    # At minimum, these functions must be called to save ray calibration parameters
+    rc.setup_stereo_geometry()
+    rc.get_pnp(chessboard_path, 6, 4, 10)
+    rc.get_water_parameters(water_point)
+    rc.setup_transformation(box_origin_point, box_xaxis_point, box_yaxis_point)
+    rc.save_parameters()
+
+    print("Saved successfully.")
+
 if __name__ == "__main__":
-    rc = RefractionCalibration("cal_images_250807-1641_10cm/stereo_matrices.npz", upload_path="cal_images_250807-1641_10cm/ray_parameters.npz")
-    # rc = RefractionCalibration("cal_images_250807-1641_10cm/stereo_matrices.npz")
-    # rc.setup_stereo_geometry()
-    # rc.get_pnp("cal_images_250807-1641_10cm/cam-0-00.png", 6, 4, 10)
+    data_dir = select_dialog.get_dir("Select calibration data directory")
+    rc = RefractionCalibration(data_dir, upload=True)
 
-    # Get these from find_origin.py
-    # Note: already undistorted
-    """ p_water_cam = np.array([45.31909385197085, -22.482463212596368, 274.023306783117])  # using top right """
-    p_water_cam = np.array([-47.167812398340914, 52.11593132229903, 445.0398179347797])
-    # rc.get_water_parameters(p_water_cam)
-
-    """ p_box_origin_cam = np.array([-7.43308086, -24.59866516, 266.73127528]) # tl
-    p_box_x_axis_cam = np.array([ 47.52253882, -24.38689605, 267.31237704]) # tr
-    p_box_y_axis_cam = np.array([ -7.48576695,  30.48156394, 266.76362464]) # bl """
-    p_box_origin_cam = np.array([-49.638713274534176, -45.97083631512408, 430.57195239144664]) # tl
-    p_box_x_axis_cam = np.array([50.416291444974846, -46.48186324869854, 435.3122079279627]) # tr
-    p_box_y_axis_cam = np.array([-48.621162654825525, 54.19308586553376, 429.52718188283563]) # bl
-
-    # rc.setup_transformation(p_box_origin_cam, p_box_x_axis_cam, p_box_y_axis_cam)
-    """ br_corner = np.array([47.26931526610344, 30.348581650670887, 266.60577051482846])
-    
-    tl_water = np.array([-4.371592286697936, -20.99286077087117, 291.5036169620433])
-    center_water = np.array([19.340094309309077, 3.143551594866998, 298.07068311511085])
-    tr_water = np.array([43.20729824531479, -20.501389250425298, 290.0414210602504])
-    water_1 = np.array([38.38620655896026, -15.834747097777955, 296.22866926976496])
-    water_2 = np.array([24.87567695813077, -8.428278710198931, 297.0490228170133])
-    water_3 = np.array([39.630995430465525, -6.726793676224169, 298.25170986568327]) """
     water_1 = np.array([-2.2376416019022405, 4.457238843732878, 503.41024057177475])
     water_2 = np.array([-7.289524693064915, 34.78150165622865, 503.57304148393183])
     water_3 = np.array([-1.0713252576989445, -21.16769176661099, 504.43306896877726])
@@ -334,11 +340,7 @@ if __name__ == "__main__":
     water_5 = np.array([16.185154425437574, 34.30008903493204, 504.0308151885528])
 
     # Points in air (for test)
-    for p in [p_box_origin_cam,
-              p_box_x_axis_cam,
-              p_box_y_axis_cam,
-              p_water_cam,
-              water_1,
+    for p in [water_1,
               water_2,
               water_3,
               water_4,
@@ -347,12 +349,6 @@ if __name__ == "__main__":
         print(f"Transformed point: {p_new_object_box}")
 
     # Points in water (for test)
-    """ tl_water_points = np.array([(840.0, 239.0), (509.0, 153.0)])
-    center_water_points = np.array([(1220.0, 630.0), (951.0, 594.0)])
-    tr_water_points = np.array([(1614.0, 247.0), (1377.0, 156.0)])
-    water_1_points = np.array([(1524.0, 328.0), (1293.0, 250.0)])
-    water_2_points = np.array([(1309.0, 446.0), (1049.0, 385.0)])
-    water_3_points = np.array([(1540.0, 473.0), (1317.0, 418.0)]) """
     water_1_points = np.array([(986.0, 614.0), (1088.0, 586.0)])
     water_2_points = np.array([(938.0, 900.0), (1036.0, 892.0)])
     water_3_points = np.array([(997.0, 372.0), (1102.0, 328.0)])
@@ -368,6 +364,3 @@ if __name__ == "__main__":
         if underwater_point is not None:
             underwater_point = rc.transform_point(underwater_point)
             print(f"Underwater Point: {underwater_point}")
-
-    # Save ray parameters
-    # rc.save_parameters("cal_images_250807-1641_10cm/ray_parameters.npz")

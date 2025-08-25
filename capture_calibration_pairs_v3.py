@@ -1,7 +1,6 @@
 # For capturing checkboard images.
 # New version uses imageevent and driver v2
 from datetime import datetime
-from capture_handler import CaptureHandler
 from camera_driver_v2 import CameraDriver
 from PySide6.QtCore import (
     QSize,
@@ -26,8 +25,22 @@ from PySide6.QtWidgets import (
 import numpy as np
 import PySpin
 import queue
-import os
+from pathlib import Path
 import cv2
+
+class CaptureHandler(PySpin.ImageEventHandler, QObject): # Need to subclass QObject as well for Signals
+    next_image = Signal(np.ndarray, int, int)
+
+    def __init__(self, idx: int):
+        PySpin.ImageEventHandler.__init__(self)
+        QObject.__init__(self)
+        self.idx = idx
+    
+    def OnImageEvent(self, image: PySpin.Image):
+        im_np: np.ndarray = image.GetNDArray()
+        im_id: int = image.GetFrameID()
+        self.next_image.emit(im_np, self.idx, im_id)
+        image.Release()
 
 class ImageLabel(QLabel):
     def __init__(self):
@@ -42,7 +55,7 @@ class SaveThread(QRunnable):
     def __init__(self,
         im_np: np.ndarray,
         cam_idx: int,
-        save_dir: str,
+        save_dir: Path,
         save_count: int
     ):
         super().__init__()
@@ -52,35 +65,32 @@ class SaveThread(QRunnable):
         self.save_count = save_count
 
     def _get_filename(self) -> str:
-        return f"{self.save_dir}/cam-{self.cam_idx}-{self.save_count:02d}.png"
+        fn = f"cam-{self.cam_idx}-{self.save_count:02d}.png"
+        return str(self.save_dir / fn)
 
     def run(self):
-        # Saves QImage, but it's aight for this code
         cv2.imwrite(self._get_filename(), self.im_np)
         
 
 class SyncThread(QObject):
     next_images = Signal(np.ndarray, np.ndarray)
-    save_request = Signal(str)
 
-    def __init__(self, cam_list: list[PySpin.Camera]):
+    def __init__(self, cam_list: list[PySpin.Camera], save_dir: Path):
         super().__init__()
-
         self.cam_list = cam_list
-        self.capture_handlers: list[CaptureHandler] = []
-
-        self.save_request.connect(self.handle_save_request)
+        self.save_dir = save_dir
         self.save = False
         self.save_count = 0
-
-        for cam_idx in range(2):
-            self.capture_handlers.append(CaptureHandler(cam_idx))
-            self.capture_handlers[cam_idx].next_image.connect(self.receive_image)
-            self.cam_list[cam_idx].RegisterEventHandler(self.capture_handlers[cam_idx])
-
-        self.buffers = [queue.Queue(), queue.Queue()]
-
+        self.buffers = [queue.Queue() for _ in range(len(cam_list))]
         self.thread_pool = QThreadPool.globalInstance()
+        
+        # Simplified camera handler setup
+        self.capture_handlers = []
+        for cam_idx, camera in enumerate(cam_list):
+            handler = CaptureHandler(cam_idx)
+            handler.next_image.connect(self.receive_image)
+            camera.RegisterEventHandler(handler)
+            self.capture_handlers.append(handler)
 
     def start(self):
         self.cam_list[1].BeginAcquisition()
@@ -111,21 +121,18 @@ class SyncThread(QObject):
             self.buffers[1].get()
             print(f"dropped cam 0 frame {id1}")
     
-    def handle_save_request(self, save_dir: str):
+    def handle_save_request(self):
         self.save = True
-        self.save_dir = save_dir
 
     def save_images(self, im0, im1):
         workers: list[SaveThread] = []
         for cam_idx, im in enumerate((im0, im1)):
             workers.append(
-                SaveThread(
-                    im, cam_idx, self.save_dir, self.save_count)
+                SaveThread(im, cam_idx, self.save_dir, self.save_count)
             )
             self.thread_pool.start(workers[cam_idx])
         self.save_count += 1
-
-        print(f"img pair {self.save_count} saved")
+        print(f"Img pair {self.save_count} saved")
 
     def stop(self):
         self.cam_list[0].EndAcquisition()
@@ -135,25 +142,25 @@ class SyncThread(QObject):
 
 
 class MainWindow(QMainWindow):
+    DISPLAY_EVERY_N_FRAMES = 3
+    SAVE = True  # Can either use as general viewing or saving
+
     def __init__(self):
         super().__init__()
         self.setup_ui()
         self.setup_cd()
-        # Misc "global" variables
+
         self.frame_counter = 0
-        self.display_every_n = 3 # Controls display update rate
-        self.cam_info: list[tuple] = [
-            CameraDriver.get_resolution(self.cd.cam_list[0]),
-            CameraDriver.get_resolution(self.cd.cam_list[1]),
-        ]
+        self.cam_info: list[tuple] = CameraDriver.get_resolution_list(self.cd.cam_list)
         self.date_time = datetime.now().strftime('%y%m%d-%H%M')
-        self.save_dir = f"cal_images_{self.date_time}"
-        os.makedirs(self.save_dir,exist_ok=True)
+        self.save_dir = Path(f"cal_images_{self.date_time}")
+        if self.SAVE:
+            self.save_dir.mkdir(exist_ok=True)
 
         self.launch_captures()
 
     def setup_ui(self):
-        self.setWindowTitle("capture calibration pairs")
+        self.setWindowTitle("Capture calibration pairs (enter to save)")
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         layout = QHBoxLayout(central_widget)
@@ -165,16 +172,16 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.video_labels[0])
         layout.addWidget(self.video_labels[1])
 
-        self.resize(QSize(1000, 400))
+        self.showMaximized()
 
     def launch_captures(self):
-        self.sync_thread = SyncThread(self.cd.cam_list)
+        self.sync_thread = SyncThread(self.cd.cam_list, self.save_dir)
         self.sync_thread.next_images.connect(self.display_images)
         self.sync_thread.start()
 
     def display_images(self, im0, im1):
 
-        if self.frame_counter % self.display_every_n == 0:
+        if self.frame_counter % self.DISPLAY_EVERY_N_FRAMES == 0:
             for im_num, im in enumerate((im0, im1)):
                 qim = QImage(im, self.cam_info[im_num][0], self.cam_info[im_num][1], QImage.Format.Format_Grayscale8)
                 pm = QPixmap.fromImage(qim)
@@ -188,8 +195,8 @@ class MainWindow(QMainWindow):
         self.frame_counter += 1
     
     def keyPressEvent(self, event):
-        if event.key() == Qt.Key.Key_Return:
-            self.sync_thread.save_request.emit(self.save_dir)
+        if event.key() == Qt.Key.Key_Return and self.SAVE:
+            self.sync_thread.handle_save_request()
 
     def setup_cd(self):
         self.cd = CameraDriver()

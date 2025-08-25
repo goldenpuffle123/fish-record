@@ -1,26 +1,28 @@
 import PySpin
-import typing
+from typing import Optional
 
 
 class CameraDriver:
-    def __init__(self):
+    def __init__(self,
+                 frame_rate: float = 100,
+                 exposure_time: float = 5000,
+                 serial_primary: str = "24048471") -> None:
+        
         self.system = None
         self.cam_list = None
         self.num_cams = None
 
         #constants
-        self.ACQUISITION_FRAME_RATE = 130
-        self.NUM_IMAGES = 5000
-        self.AUTOEXPOSUREUPPERLIMIT = 5000
-        self.SERIAL_PRIMARY = "24048471"
+        self.ACQUISITION_FRAME_RATE = frame_rate        # Check limit of camera specs
+        self.AUTOEXPOSUREUPPERLIMIT = exposure_time     # Must be less than frame rate (otherwise bottleneck)
+        self.SERIAL_PRIMARY = serial_primary            # Primary camera serial number
 
-    def initialize_cameras(self):
+    def initialize_cameras(self) -> None:
         try:
-            # Init cams from system
             self.system: PySpin.System = PySpin.System.GetInstance()
-            self._pyspin_cam_list: PySpin.CameraList = self.system.GetCameras()
-            self.cam_list: list[PySpin.Camera] = list(self._pyspin_cam_list)
-            self.num_cams: int = len(self.cam_list)
+            self._pyspin_cam_list: PySpin.CameraList = self.system.GetCameras()  # PySpin CameraList object
+            self.cam_list: list[PySpin.Camera] = list(self._pyspin_cam_list)     # Pythonic list of PySpin Cameras
+            self.num_cams: int = len(self._pyspin_cam_list)
 
             if self.num_cams == 0:
                 print('\tNo devices detected.')
@@ -32,14 +34,14 @@ class CameraDriver:
                 device_model_name = cam.TLDevice.DeviceModelName.GetValue()
                 device_serial = cam.TLDevice.DeviceSerialNumber.ToString()
                 print(f"\tDevice {i}: {device_vendor_name} {device_model_name} {device_serial}")
-            del cam
+            del cam   # Recommended to delete this cam pointer after loop
 
             print(f"\t{self.num_cams} cams")
             
         except PySpin.SpinnakerException as ex:
             print(f"Error initializing cameras: {ex}")
-    
-    def set_config_all(self):
+
+    def set_config_all(self) -> None:
         try:
             if self.num_cams == 0:
                 print("\tNo devices detected.")
@@ -50,7 +52,7 @@ class CameraDriver:
                 # Load default user settings
                 cam.Init()
 
-                cam.UserSetSelector.SetValue(PySpin.UserSetSelector_Default)
+                cam.UserSetSelector.SetValue(PySpin.UserSetSelector_Default)  # Reset to default settings first
                 cam.UserSetLoad()
 
                 cam.AcquisitionMode.SetValue(PySpin.AcquisitionMode_Continuous)
@@ -59,20 +61,20 @@ class CameraDriver:
                 cam.AcquisitionFrameRateEnable.SetValue(True)
                 cam.AcquisitionFrameRate.SetValue(self.ACQUISITION_FRAME_RATE)
 
-                cam.TLStream.StreamBufferHandlingMode.SetValue(PySpin.StreamBufferHandlingMode_NewestFirst)
+                cam.TLStream.StreamBufferHandlingMode.SetValue(PySpin.StreamBufferHandlingMode_NewestFirst)  # Can be changed
             del cam
 
         except PySpin.SpinnakerException as ex:
             print(f"Error setting general config: {ex}")
 
-    def set_config_sync_two(self):
+    def set_config_sync_two(self) -> None:
         try:
             if self.num_cams != 2:
-                print("cannot run sync config, need two cameras")
+                print("Cannot run sync config, need two cameras")
                 self.release_all()
                 quit()
             
-            if self.cam_list[0].TLDevice.DeviceSerialNumber.ToString() != self.SERIAL_PRIMARY:  # Swap to correct order
+            if self.cam_list[0].TLDevice.DeviceSerialNumber.ToString() != self.SERIAL_PRIMARY:  # Swap to correct order (want primary first)
                 self.cam_list[1], self.cam_list[0] = self.cam_list[0], self.cam_list[1]
         
             # Config of primary according to 
@@ -82,7 +84,6 @@ class CameraDriver:
 
             self.cam_list[0].LineSelector.SetValue(PySpin.LineSelector_Line2)
             self.cam_list[0].V3_3Enable.SetValue(True)
-            # self.cam_list[0].TriggerMode.SetValue(PySpin.TriggerMode_On)
 
             #Config of secondary
             self.cam_list[1].TriggerSource.SetValue(PySpin.TriggerSource_Line3)
@@ -91,8 +92,8 @@ class CameraDriver:
 
         except PySpin.SpinnakerException as ex:
             print(f"Error setting sync config: {ex}")
-    
-    def release_all(self):
+
+    def release_all(self) -> None:
         try:
             if self._pyspin_cam_list:
                 for cam in self._pyspin_cam_list:
@@ -109,13 +110,13 @@ class CameraDriver:
             if self.system:
                 self.system.ReleaseInstance()
                 del self.system
-            print("released all")
+            print("\tReleased all camera resources")
 
         except PySpin.SpinnakerException as ex:
             print(f"Error releasing: {ex}")
     
     @staticmethod
-    def get_resolution(cam: PySpin.Camera) -> typing.Optional[tuple[int, int]]:
+    def get_resolution(cam: PySpin.Camera) -> Optional[tuple[int, int]]:
         try:
             return cam.Width.GetValue(), cam.Height.GetValue()
         except PySpin.SpinnakerException as ex:

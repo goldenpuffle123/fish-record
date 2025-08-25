@@ -236,7 +236,7 @@ class SyncHandler(QObject):
     # Only emit for display purposes, much less frequently
     display_frame_ready: Signal = Signal(np.ndarray, np.ndarray)
 
-    def __init__(self, cam_list: list[PySpin.Camera], frame_rate: float):
+    def __init__(self, cam_list: list[PySpin.Camera], frame_rate: float, display_every_n: int):
         super().__init__()
         self.cam_list = cam_list
 
@@ -264,7 +264,7 @@ class SyncHandler(QObject):
         self.frame_info = [queue.Queue(), queue.Queue()]
         
         # Display and sync control
-        self.display_every_n = 5  # Display every 5th frame (20Hz at 100Hz capture)
+        self.display_every_n = display_every_n
         self.frame_counter = 0
         self.warmup_frames = 300
 
@@ -353,11 +353,7 @@ class MainWindow(QMainWindow):
         self.setup_cd()
 
         # Misc "global" variables
-        self.display_counter = 0
-        self.cam_info: list[tuple] = [
-            CameraDriver.get_resolution(self.cd.cam_list[0]),
-            CameraDriver.get_resolution(self.cd.cam_list[1]),
-        ]
+        self.cam_info: list[tuple] = CameraDriver.get_resolution_list(self.cd.cam_list)
         
         self.launch_captures()
 
@@ -372,11 +368,11 @@ class MainWindow(QMainWindow):
         self.video_labels = [ImageLabel(), ImageLabel()]
         layout.addWidget(self.video_labels[0])
         layout.addWidget(self.video_labels[1])
-        self.resize(QSize(1000, 400))
+        self.showMaximized()
 
     def launch_captures(self):
         """Launch the unified sync handler"""
-        self.sync_handler = SyncHandler(self.cd.cam_list, self.cd.ACQUISITION_FRAME_RATE)
+        self.sync_handler = SyncHandler(self.cd.cam_list, self.cd.ACQUISITION_FRAME_RATE, 10)
         self.sync_handler.display_frame_ready.connect(self.display_images)
         self.sync_handler.start()
 

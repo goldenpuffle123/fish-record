@@ -23,7 +23,6 @@ import cv2
 import numpy as np
 
 import select_dialog
-from pathlib import Path
 
 
 class KeypointWidget(QWidget):
@@ -122,25 +121,25 @@ class KeypointScroller(QScrollArea):
         
 
 if __name__ == "__main__":
+    POINTS_TO_GET = 3
     app = QApplication([])
 
+    data_dir = select_dialog.get_dir("Select calibration data directory")
     try:
-        projection_matrices_path = "cal_images_250807-1641_10cm/projection_matrices.npz"
-        projection_matrices = np.load(projection_matrices_path)
-        #np.load(select_dialog.get_filepath("Select projection matrices file", filter="*.npz"))
+        projection_matrices = np.load(data_dir + "/projection_matrices.npz")
+        P0 = projection_matrices["P0"]
+        P1 = projection_matrices["P1"]
+
+        cali_matrices = np.load(data_dir + "/stereo_matrices.npz")
     except OSError:
-        print("Projection matrices file not found.")
+        print("Matrices files not found.")
         quit()
-    P0 = projection_matrices["P0"]
-    P1 = projection_matrices["P1"]
 
-    cali_matrices = np.load("cal_images_250807-1641_10cm/stereo_matrices.npz")
+    test_videos = select_dialog.get_filepaths("Select test videos", filter="*.mp4", pair=True)
 
-    for _ in range(3): # How many times to run
+    for _ in range(POINTS_TO_GET): # How many times to run
+
         origin_points = [None, None]
-        test_videos = ["synced_videos/data_250807-170559_cam-0_10cm.mp4",
-                    "synced_videos/data_250807-170559_cam-1_10cm.mp4"]
-        #np.load(select_dialog.get_filepaths("Select test videos", filter="*.mp4", pair=True))
 
         windows = [
             KeypointScroller(test_videos[i], origin_points, i)
@@ -166,4 +165,3 @@ if __name__ == "__main__":
             )
             points_3d = (points_4d[:3] / points_4d[3]).T
             print(f"Triangulated: {points_3d[0].tolist()}")
-        # np.save(Path(projection_matrices).parent / "water_point.npy", points_3d[0])
