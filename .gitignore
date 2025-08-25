@@ -6,10 +6,9 @@ __pycache__/
 *.yml
 *.yaml
 *.txt
-*.md
-!README.md
 *.jpg
 *.png
+!guides/**
 !fishy_thumbsup.png
 *.mp4
 *.avi
