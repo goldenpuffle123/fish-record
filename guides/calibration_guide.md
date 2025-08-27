@@ -1,9 +1,9 @@
 # Calibrating parameters for two-camera triangulation
 ## Workflow
 ### Set up chessboard
-Follow the instructions from [Calibration Checkerboard Collection](https://markhedleyjones.com/projects/calibration-checkerboard-collection). Download and print a chessboard and mount on a very flat surface. Take note of the individual square size in mm and the **inner** width and height. E.g., the chessboard below has an **inner** width of 6 and an **inner** height of 4.
+Follow the instructions from [Calibration Checkerboard Collection](https://markhedleyjones.com/projects/calibration-checkerboard-collection). Download and print a chessboard and mount on a flat surface. Take note of the individual square size in mm and the **inner** width and height. E.g., the chessboard below has an **inner** width of 6 and an **inner** height of 4.
 ### Capture chessboard image pairs
-Use [capture_calibration_pairs_v3.py](/capture_calibration_pairs_v3.py) to capture a good amount of calibration images. These will be saved in a new folder with the current timestamp.
+Use [capture_calibration_pairs_v3.py](/capture_calibration_pairs_v3.py) with `SAVE_MODE` set to `True` to capture a good amount of calibration images. These will be saved in a new folder with the current timestamp.
 - Images should be taken from many different angles and distances, but ensure: 1. Entire chessboard is visible in each image, 2. Always orient based on your chosen width and height
 - Take a couple images with the chessboard laying **flat** on the surface that the enclosure will eventually be laid on (i.e., we are assuming that this surface is parallel to the water surface)
 - Ensure bright and consistent lighting (i.e., if using IR filter, either shine IR light on chessboard or take off filter)
@@ -28,7 +28,9 @@ The (4) points that you must need for ray correction are:
 
 ![Points guide](./images/ray_correction_points.png)
 
-The program will display each pair of points consecutively. Accordingly, choose each pair consecutively. It will print each **triangulated point** in the terminal, so **copy and save them** somewhere.
+The program will display each pair of points consecutively. Accordingly, choose each pair consecutively. Use mouse for rough adjustments, and arrow keys for fine adjustments.
+
+It will print each **triangulated point** in the terminal, so **copy and save them** somewhere.
 
 ### Set up ray correction parameters
 For the first time at least, we need to set up the ray correction parameters using the 4 points as above.

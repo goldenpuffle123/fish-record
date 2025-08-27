@@ -1,16 +1,21 @@
 __pycache__/
 .vscode/*
 !.vscode/settings.json
+# Data
 *.npz
 *.npy
 *.yml
 *.yaml
 *.txt
+# Images
 *.jpg
 *.png
+# Everything in guides
 !guides/**
 !fishy_thumbsup.png
+# Data videos
 *.mp4
 *.avi
 *.whl
 *.csv
+!environment.yml

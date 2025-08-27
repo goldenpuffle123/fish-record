@@ -11,14 +11,14 @@ class BufferedCaptureHandler(PySpin.ImageEventHandler, QObject):
     # Signal now only carries frame info, not the actual image data
     frame_captured: Signal = Signal(int, int, int)  # cam_idx, frame_id, buffer_idx
 
-    def __init__(self, idx: int, frame_shape: tuple):
+    def __init__(self, idx: int, frame_shape: tuple, num_buffers: int = 4):
         PySpin.ImageEventHandler.__init__(self)
         QObject.__init__(self)
         self.idx = idx
+        self.num_buffers = num_buffers
         
-        # 3 buffers: allows more flexibility for read/write operations
         self.buffers: list[shared_memory.SharedMemory] = []
-        for i in range(4):
+        for i in range(self.num_buffers):
             name = f"cam-{idx}_buf-{i}"
             shm = shared_memory.SharedMemory(create=True, size=int(np.prod(frame_shape)), name=name)
             self.buffers.append(shm)
@@ -39,7 +39,7 @@ class BufferedCaptureHandler(PySpin.ImageEventHandler, QObject):
             
             buffer_idx = self.current_write
             # Cycle through 3 buffers for next write
-            self.current_write = (self.current_write + 1) % 4
+            self.current_write = (self.current_write + 1) % self.num_buffers
         
         self.frame_captured.emit(self.idx, im_id, buffer_idx)
         image.Release()
@@ -55,6 +55,7 @@ class BufferedCaptureHandler(PySpin.ImageEventHandler, QObject):
         with self.write_lock:
             np_view = np.ndarray(self.frame_shape, dtype=np.uint8, buffer=self.buffers[buffer_idx].buf)
             return np_view.copy().tobytes()
+        
     def cleanup(self):
         """Clean up shared memory buffers"""
         for buffer in self.buffers:

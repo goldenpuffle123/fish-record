@@ -3,25 +3,25 @@ from typing import Optional
 
 
 class CameraDriver:
+    SERIAL_PRIMARY = "24048471"  # Primary camera serial number
+
     def __init__(self,
                  frame_rate: float = 100,
-                 exposure_time: float = 5000,
-                 serial_primary: str = "24048471") -> None:
+                 exposure_time: float = 5000) -> None:
         
         self.system = None
         self.cam_list = None
-        self.num_cams = None
+        self.num_cams = 0
 
         #constants
-        self.ACQUISITION_FRAME_RATE = frame_rate        # Check limit of camera specs
-        self.AUTOEXPOSUREUPPERLIMIT = exposure_time     # Must be less than frame rate (otherwise bottleneck)
-        self.SERIAL_PRIMARY = serial_primary            # Primary camera serial number
+        self.ACQUISITION_FRAME_RATE = frame_rate        # Frame rate (check limit from camera specs)
+        self.EXPOSURETIME = exposure_time     # Exposure time (microseconds)
 
     def initialize_cameras(self) -> None:
         try:
             self.system: PySpin.System = PySpin.System.GetInstance()
             self._pyspin_cam_list: PySpin.CameraList = self.system.GetCameras()  # PySpin CameraList object
-            self.cam_list: list[PySpin.Camera] = list(self._pyspin_cam_list)     # Pythonic list of PySpin Cameras
+            self.cam_list: list[PySpin.Camera] = list(self._pyspin_cam_list)     # Pythonic list of PySpin Cameras (we will manage this)
             self.num_cams: int = len(self._pyspin_cam_list)
 
             if self.num_cams == 0:
@@ -56,7 +56,10 @@ class CameraDriver:
                 cam.UserSetLoad()
 
                 cam.AcquisitionMode.SetValue(PySpin.AcquisitionMode_Continuous)
-                cam.AutoExposureExposureTimeUpperLimit.SetValue(self.AUTOEXPOSUREUPPERLIMIT) # Clunky setting but needed... supposedly
+
+                cam.ExposureAuto.SetValue(PySpin.ExposureAuto_Off)  # Turn off auto exposure
+
+                cam.ExposureTime.SetValue(self.EXPOSURETIME)  # Set exposure time (in microseconds)
                 
                 cam.AcquisitionFrameRateEnable.SetValue(True)
                 cam.AcquisitionFrameRate.SetValue(self.ACQUISITION_FRAME_RATE)
@@ -74,7 +77,7 @@ class CameraDriver:
                 self.release_all()
                 quit()
             
-            if self.cam_list[0].TLDevice.DeviceSerialNumber.ToString() != self.SERIAL_PRIMARY:  # Swap to correct order (want primary first)
+            if self.cam_list[0].TLDevice.DeviceSerialNumber.ToString() != self.SERIAL_PRIMARY:  # Swap to correct order (we want primary first)
                 self.cam_list[1], self.cam_list[0] = self.cam_list[0], self.cam_list[1]
         
             # Config of primary according to 
@@ -85,7 +88,7 @@ class CameraDriver:
             self.cam_list[0].LineSelector.SetValue(PySpin.LineSelector_Line2)
             self.cam_list[0].V3_3Enable.SetValue(True)
 
-            #Config of secondary
+            # Config of secondary
             self.cam_list[1].TriggerSource.SetValue(PySpin.TriggerSource_Line3)
             self.cam_list[1].TriggerOverlap.SetValue(PySpin.TriggerOverlap_ReadOut)
             self.cam_list[1].TriggerMode.SetValue(PySpin.TriggerMode_On)
@@ -128,6 +131,6 @@ class CameraDriver:
         list = []
         for cam in cam_list:
             res = CameraDriver.get_resolution(cam)
-            if res:
+            if all(res):
                 list.append(res)
         return list

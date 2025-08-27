@@ -143,7 +143,7 @@ class SyncThread(QObject):
 
 class MainWindow(QMainWindow):
     DISPLAY_EVERY_N_FRAMES = 3
-    SAVE = True  # Can either use as general viewing or saving
+    SAVE_MODE = True  # Can either use as general viewing or saving
 
     def __init__(self):
         super().__init__()
@@ -154,7 +154,7 @@ class MainWindow(QMainWindow):
         self.cam_info: list[tuple] = CameraDriver.get_resolution_list(self.cd.cam_list)
         self.date_time = datetime.now().strftime('%y%m%d-%H%M')
         self.save_dir = Path(f"cal_images_{self.date_time}")
-        if self.SAVE:
+        if self.SAVE_MODE:
             self.save_dir.mkdir(exist_ok=True)
 
         self.launch_captures()
@@ -195,7 +195,7 @@ class MainWindow(QMainWindow):
         self.frame_counter += 1
     
     def keyPressEvent(self, event):
-        if event.key() == Qt.Key.Key_Return and self.SAVE:
+        if event.key() == Qt.Key.Key_Return and self.SAVE_MODE:
             self.sync_thread.handle_save_request()
 
     def setup_cd(self):
